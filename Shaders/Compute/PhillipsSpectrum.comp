@@ -1,0 +1,72 @@
+#version 430
+
+#define PI_2 2.0 * 3.14159
+#define GRAVITY 9.81
+#define TOLERANCE 0.00001
+
+layout(local_size_x = 32, local_size_y = 32) in;
+
+struct FFTData
+{
+	vec2 height;
+	vec2 choppyX;
+	vec2 choppyZ;
+};
+
+layout(std430, binding = 0) buffer Amp0Buffer
+{
+	vec4 amplitudesTime0[];
+};
+
+layout(std430, binding = 1) buffer FFTBuffer
+{
+	FFTData fft_output[];
+};
+
+uniform struct Data
+{
+	int gridSize;
+	float gridSizeHalf;
+	float patchLength;
+	float time;
+} data;
+
+vec2 complexMul(vec2 lhs, vec2 rhs)
+{
+	vec2 ret;
+	ret.x = lhs.x * rhs.x - lhs.y * rhs.y;
+	ret.y = lhs.x * rhs.y + lhs.y * rhs.x;
+	return ret;
+}
+
+void main()
+{
+	ivec2 coords = ivec2(gl_GlobalInvocationID.xy);
+	int arrayIndex = coords.y * data.gridSize + coords.x;
+	
+	vec4 amp0 = amplitudesTime0[arrayIndex];
+	
+	vec2 K = PI_2 * vec2(coords - data.gridSizeHalf) / data.patchLength;
+	
+	float kMag = dot(K, K);
+	if(kMag < TOLERANCE)
+	{
+		kMag = TOLERANCE;
+	}
+	else
+	{
+		kMag = sqrt(kMag);
+	}	
+	
+	float dispersionRelation = sqrt(GRAVITY * kMag);	
+	float delta = dispersionRelation * data.time;
+	
+	vec2 ht = complexMul(amp0.xy, vec2(cos(delta), sin(delta))) + complexMul(amp0.zw, vec2(cos(-delta), sin(-delta)));
+	
+	FFTData outData;
+	outData.height = ht;
+	outData.choppyX = complexMul(vec2(0.0, -K.x / kMag), ht);
+	outData.choppyZ = complexMul(vec2(0.0, -K.y / kMag), ht);
+	
+	fft_output[arrayIndex] = outData;
+}

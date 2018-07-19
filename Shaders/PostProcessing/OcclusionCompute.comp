@@ -1,0 +1,43 @@
+#version 430
+
+layout (rgba16f) uniform image2D inImage;
+layout (rgba16f) uniform image2D outImage;
+
+layout (local_size_x = 2, local_size_y = 2) in;
+
+const vec4 colors[4] = vec4[4](
+	vec4(1, 0, 0, 1),
+	vec4(0, 1, 0, 1),
+	vec4(0, 0, 1, 1),
+	vec4(1, 1, 0, 1)
+);
+
+uniform float sunScale;
+uniform int avgIndex;
+
+void main()
+{
+	
+	uint xOffset = gl_LocalInvocationID.x * 32;
+	uint yOffset = gl_LocalInvocationID.y * 32;
+	
+	float intensity = 0.0;
+	for(int i = 0; i < 32; i++)
+	{
+		for(int j = 0; j < 32; j++)
+		{
+		
+			ivec2 texCoord = ivec2(j + xOffset, i + yOffset);
+			vec4 pixel = imageLoad(inImage, texCoord);
+			
+			//red channel stores sun
+			intensity += pixel.r;		
+		}
+	}
+	
+	ivec2 slot = ivec2(gl_LocalInvocationID.xy);
+	vec4 curr = imageLoad(outImage, slot);
+	curr[avgIndex] = intensity;	
+	curr = vec4(intensity);
+	imageStore(outImage, slot, curr);
+}

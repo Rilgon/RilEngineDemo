@@ -1,0 +1,54 @@
+#version 430
+
+#define STEP 0.01666667
+
+layout(local_size_x = 64) in;
+
+struct Particle
+{
+	vec4 position_startLife;
+	vec4 direction_currLife;
+};
+
+struct DrawArraysIndirectCommand 
+{
+	uint  count;
+	uint  instanceCount;
+	uint  first;
+	uint  baseInstance;
+};
+
+layout(std430, binding = 0) buffer ParticleInput
+{
+	DrawArraysIndirectCommand activeCommand;
+	Particle pinput[];
+};
+
+layout(std430, binding = 1) buffer ParticleOutput
+{
+	DrawArraysIndirectCommand aliveCommand;
+	Particle poutput[];
+};
+
+
+uniform vec3 force = vec3(0.0, 0.0, 0.0);
+
+void main()
+{
+	//invocations might not equal the actual numbers of particles being processed due to calculation of dispatch number
+	if(gl_GlobalInvocationID.x < activeCommand.count)
+	{	
+		Particle particle = pinput[gl_GlobalInvocationID.x];
+		particle.direction_currLife.w -= 1.0;
+		
+		if(particle.direction_currLife.w > 0.5)
+		{
+			particle.position_startLife.xyz += particle.direction_currLife.xyz * STEP;
+			particle.direction_currLife.xyz += force * STEP;
+			//particle.direction_currLife.xyz = mix(particle.direction_currLife.xyz, force, STEP);
+			
+			uint arrayIndex = atomicAdd(aliveCommand.count, 1);
+			poutput[arrayIndex] = particle;
+		}
+	}
+}

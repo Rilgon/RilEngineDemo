@@ -1,0 +1,32 @@
+#version 430
+
+layout(local_size_x = 1) in;
+
+layout(binding = 0, rgba16f) uniform image2D lumaAvgTex;
+layout(binding = 1, rgba16f) uniform image2D lumaSumTex;
+
+uniform int circularIndex;
+
+void main()
+{
+	ivec2 imgSize = imageSize(lumaSumTex);
+	
+	float sum = 0.0;
+	for(int i = 0; i < imgSize.y; i++)
+	{
+		sum += imageLoad(lumaSumTex, ivec2(0, i)).r;
+	}
+	
+	sum /= (imgSize.x * imgSize.y);
+	sum = exp(sum);
+	
+	sum = clamp(sum, 0.0, 1.0);
+	
+	vec4 luma = imageLoad(lumaAvgTex, ivec2(0,0));
+	luma[circularIndex] = sum;
+	
+	//float lumaSum = dot(luma.rgb, vec3(1));
+	//luma.w = lumaSum;
+	
+	imageStore(lumaAvgTex, ivec2(0,0), luma);
+}

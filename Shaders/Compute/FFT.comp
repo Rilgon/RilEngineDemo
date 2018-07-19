@@ -1,0 +1,60 @@
+#version 430
+
+layout(local_size_x = 32, local_size_y = 32) in;
+
+struct FFTData
+{
+	vec2 height;
+	vec2 choppyX;
+	vec2 choppyZ;
+};
+
+layout(std430, binding = 0) buffer TwiddleBuffer
+{
+	vec4 twiddleFactors[];
+};
+
+layout(std430, binding = 1) buffer FFTInBuffer
+{
+	FFTData fft_input[];
+};
+
+layout(std430, binding = 2) buffer FFTOutBuffer
+{
+	FFTData fft_output[];
+};
+
+uniform struct Data
+{
+	int gridSize;
+	int stage;
+} data;
+
+vec2 complexMul(vec2 lhs, vec2 rhs)
+{
+	vec2 ret;
+	ret.x = lhs.x * rhs.x - lhs.y * rhs.y;
+	ret.y = lhs.x * rhs.y + lhs.y * rhs.x;
+	return ret;
+}
+
+void main()
+{
+	uint arrayIndex = gl_GlobalInvocationID.y * data.gridSize + gl_GlobalInvocationID.x;
+	uint twiddleIndex = data.stage * data.gridSize + gl_GlobalInvocationID.x;
+	
+	vec4 twiddle = twiddleFactors[twiddleIndex];
+	
+	ivec2 twiddleIndices = ivec2(twiddle.xy);
+	vec2 W = twiddle.zw;
+	
+	FFTData data0 = fft_input[gl_GlobalInvocationID.y * data.gridSize + twiddleIndices.x];
+	FFTData data1 = fft_input[gl_GlobalInvocationID.y * data.gridSize + twiddleIndices.y];
+	
+	FFTData outData;
+	outData.height = data0.height + complexMul(W, data1.height);
+	outData.choppyX = data0.choppyX + complexMul(W, data1.choppyX);
+	outData.choppyZ = data0.choppyZ + complexMul(W, data1.choppyZ);
+	
+	fft_output[arrayIndex] = outData;
+}

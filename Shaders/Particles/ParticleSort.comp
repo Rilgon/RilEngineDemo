@@ -1,0 +1,56 @@
+#version 430
+
+//NOTE: This shader sorts them largest to smalles distances(want to render far particles first)
+
+layout(local_size_x = 64) in;
+
+struct SortData
+{
+	uint index;
+	float distance;
+};
+
+layout(std430, binding = 1) buffer SortBuffer
+{
+	SortData sortData[];
+};
+
+uniform struct SortInfo
+{
+	int jump;
+	int offset;
+	int offsetHalf;
+	int dirMask;
+} inData;
+
+void main()
+{
+	int k = int(gl_GlobalInvocationID.x);
+
+	int jumpOffset = (k / inData.offset);
+	jumpOffset *= inData.offsetHalf;
+
+	int base0 = k * inData.jump + jumpOffset;
+	int base1 = base0 + inData.offset;
+	
+	int dir = k & inData.dirMask;
+
+	if (dir == 0)
+	{
+		if (sortData[base0].distance < sortData[base1].distance)
+		{
+			SortData tmp = sortData[base1];
+			sortData[base1] = sortData[base0];
+			sortData[base0] = tmp;
+		}
+	}
+	else
+	{
+		if (sortData[base1].distance < sortData[base0].distance)
+		{
+			SortData tmp = sortData[base0];
+			sortData[base0] = sortData[base1];
+			sortData[base1] = tmp;
+		}
+	}
+}

@@ -1,0 +1,156 @@
+#version 430
+
+#define NUM_BONES
+
+layout(local_size_x = 16) in;
+
+struct Transform
+{
+	vec4 translation;
+	vec4 scale;
+	vec4 rotation;
+};
+
+layout(std430, binding = 0) buffer LocalBuffer
+{
+	mat4 localMatrices[];
+};
+
+layout(std430, binding = 1) buffer AnimationTransforms
+{
+	Transform animTransforms[];
+};
+
+struct KeyData
+{
+	float blendFactor;
+	int key0;
+	int key1;
+	int numKeyframes;
+	int startIndex;
+};
+
+uniform struct AnimData
+{
+	KeyData anim0;
+	KeyData anim1;
+	float blendFactor;
+} data;
+
+vec4 slerp(vec4 q0, vec4 q1, float blendFactor);
+mat4 Translate(vec4 T);
+mat4 Scale(vec4 S);
+mat4 Rotate(vec4 Q);
+
+void main()
+{
+	int boneIndex = int(gl_GlobalInvocationID.x);
+	if(boneIndex < NUM_BONES)
+	{
+		Transform t0 = animTransforms[data.anim0.startIndex + boneIndex * data.anim0.numKeyframes + data.anim0.key0];
+		Transform t1 = animTransforms[data.anim0.startIndex + boneIndex * data.anim0.numKeyframes + data.anim0.key1];
+		
+		vec4 translation0 = mix(t0.translation, t1.translation, data.anim0.blendFactor);
+		vec4 scale0 = mix(t0.scale, t1.scale, data.anim0.blendFactor);
+		vec4 rotation0 = slerp(t0.rotation, t1.rotation, data.anim0.blendFactor);
+		
+		t0 = animTransforms[data.anim1.startIndex + boneIndex * data.anim1.numKeyframes + data.anim1.key0];
+		t1 = animTransforms[data.anim1.startIndex + boneIndex * data.anim1.numKeyframes + data.anim1.key1];
+		
+		vec4 translation1 = mix(t0.translation, t1.translation, data.anim1.blendFactor);
+		vec4 scale1 = mix(t0.scale, t1.scale, data.anim1.blendFactor);
+		vec4 rotation1 = slerp(t0.rotation, t1.rotation, data.anim1.blendFactor);
+		
+		vec4 translation = mix(translation0, translation1, data.blendFactor);
+		vec4 scale = mix(scale0, scale1, data.blendFactor);
+		vec4 rotation = slerp(rotation0, rotation1, data.blendFactor);
+		
+		localMatrices[boneIndex] = Translate(translation) * Rotate(rotation) * Scale(scale);
+	}
+}
+
+vec4 slerp(vec4 q0, vec4 q1, float blendFactor)
+{
+	float cosAngle = dot(q0, q1);
+	if(cosAngle < 0.0)
+	{
+		q1 = -q1;
+		cosAngle = -cosAngle;
+	}
+	
+	vec4 quat;
+	
+	if(cosAngle < 0.998)
+	{
+		float angle = acos(cosAngle);		
+		float sinAngle = sin(angle);
+		
+		q0 = (sin((1.0 - blendFactor) * angle) / sinAngle) * q0;
+		q1 = (sin(blendFactor * angle) / sinAngle) * q1;
+		
+		quat = q0 + q1;
+	}
+	else
+	{
+		quat = mix(q0, q1, blendFactor);
+	}
+	
+	float magSqr = dot(quat, quat);
+	quat *= 1.0 / sqrt(magSqr);
+	return quat;
+}
+
+mat4 Translate(vec4 T)
+{
+	return mat4(
+		vec4(1.0, 0.0, 0.0, 0.0),
+		vec4(0.0, 1.0, 0.0, 0.0),
+		vec4(0.0, 0.0, 1.0, 0.0),
+		T
+	);
+}
+
+mat4 Scale(vec4 S)
+{
+	return mat4(
+		vec4(S.x, 0.0, 0.0, 0.0),
+		vec4(0.0, S.y, 0.0, 0.0),
+		vec4(0.0, 0.0, S.z, 0.0),
+		vec4(0.0, 0.0, 0.0, 1.0)
+	);
+}
+
+mat4 Rotate(vec4 Q)
+{
+	float xx = Q.x * Q.x;
+	float yy = Q.y * Q.y;
+	float zz = Q.z * Q.z;
+	
+	float xy = Q.x * Q.y;
+	float xz = Q.x * Q.z;
+	float yz = Q.y * Q.z;
+	float wx = Q.w * Q.x;
+	float wy = Q.w * Q.y;
+	float wz = Q.w * Q.z;
+	
+	mat4 rot;
+	
+	rot[0][0] = 1.0 - 2.0 * yy - 2.0 * zz;
+	rot[1][0] = 2.0 * xy - 2.0 * wz;
+	rot[2][0] = 2.0 * xz + 2.0 * wy;
+	rot[3][0] = 0.0;
+	
+	rot[0][1] = 2.0 * xy + 2.0 * wz;
+	rot[1][1] = 1.0 - 2.0 * xx - 2.0 * zz;
+	rot[2][1] = 2.0 * yz - 2.0 * wx;
+	rot[3][1] = 0.0;
+	
+	rot[0][2] = 2.0 * xz - 2.0 * wy;
+	rot[1][2] = 2.0 * yz + 2.0 * wx;
+	rot[2][2] = 1.0 - 2.0 * xx - 2.0 * yy;
+	rot[3][2] = 0.0;
+	
+	rot[3] = vec4(0.0, 0.0, 0.0, 1.0);
+	
+	return rot;
+}

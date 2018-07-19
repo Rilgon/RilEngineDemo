@@ -1,0 +1,56 @@
+#version 430
+
+#define SMALL_FLOAT -1.0
+
+layout(local_size_x = 64) in;
+
+struct SortData
+{
+	uint index;
+	float distance;
+};
+
+struct Particle
+{
+	vec4 position_startLife;
+	vec4 direction_currLife;
+};
+
+struct DrawArraysIndirectCommand 
+{
+	uint  count;
+	uint  instanceCount;
+	uint  first;
+	uint  baseInstance;
+};
+
+layout(std430, binding = 0) buffer ParticleInput
+{
+	DrawArraysIndirectCommand aliveCommand;
+	Particle[] particles;	
+};
+
+layout(std430, binding = 1) buffer SortBuffer
+{
+	SortData sortData[];
+};
+
+uniform vec3 camPosition; //in local space of particles
+
+void main()
+{
+	SortData sort;
+	sort.index = gl_GlobalInvocationID.x;
+
+	if(gl_GlobalInvocationID.x < aliveCommand.count)
+	{
+		vec3 delta = particles[sort.index].position_startLife.xyz - camPosition;
+		sort.distance = dot(delta, delta);
+	}
+	else
+	{
+		sort.distance = SMALL_FLOAT;
+	}
+	
+	sortData[gl_GlobalInvocationID.x] = sort;
+}
